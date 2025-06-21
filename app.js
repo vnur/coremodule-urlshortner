@@ -1,92 +1,120 @@
-const readline = require("readline");
+const http = require("http");
+const port = process.env.PORT;
+const fs = require("fs/promises");
+const path = require("path");
+const crypto = require("crypto")
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-let task = [];
-
-const showInterface = () => {
-  console.log("1: create Task");
-  console.log("2: read Task");
-  console.log("3: update Task");
-  console.log("4: delete Task");
-  console.log("5: exit Task");
-  console.log("\n");
-
-  rl.question("choose option : ", (option) => {
-    switch (parseInt(option)) {
-      case 1:
-        rl.question("add task : ", (taskvalue) => {
-          task.push(taskvalue);
-          console.log("\n");
-          showInterface();
-        });
-        break;
-      case 2:
-        task.forEach((item, index) => {
-          console.log(index + 1, item);
-        });
-        console.log("\n");
-        showInterface();
-        break;
-
-      case 3:
-        rl.question("update task : ", (data) => {
-          if (task.includes(data)) {
-            const indexno = task.indexOf(data);
-            console.log(indexno);
-
-            rl.question("please tell me update data : ", (updateddata) => {
-              task[indexno] = updateddata;
-              task.forEach((item, index) => {
-                console.log(index + 1, item);
-              });
-
-              console.log("\n");
-              showInterface();
-            });
-          } else {
-            console.log("item not found");
-            console.log("\n");
-            showInterface();
-          }
-        });
-        break;
+const htmlfile = path.join(__dirname, "view", "index.html");
+const cssfile = path.join(__dirname, "view", "style.css");
+const datafile = path.join(__dirname, "data", "data.json")
 
 
-        case 4:
-            rl.question("delete task : ", (value)=>{
-
-                const updateddeleted = task.filter((item)=>{
-                    return item !== value
-                })
-                
-                task = updateddeleted
-                
-                console.log("\n");
-                showInterface()
-            })
-            break;
-
-
-
-
-
-
-
-
-      case 5:
-        console.log("good bye ");
-        rl.close();
-        break;
-      default:
-        console.log("your are type wrong please type correct option");
-        console.log("\n");
-        showInterface();
+const loadfile = async () => {
+  try {
+    const readdata = await fs.readFile(datafile, "utf-8")
+    return JSON.parse(readdata)
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      await fs.writeFile(datafile, JSON.stringify({}))
+      return {}
     }
-  });
-};
+    throw error
+  }
+}
 
-showInterface();
+
+const saveData = async (loaddata) => {
+  return await fs.writeFile(datafile, JSON.stringify(loaddata))
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.method == "GET") {
+    if (req.url == "/") {
+      const readfile = await fs.readFile(htmlfile, "utf-8");
+      res.writeHead(200, { "Content-Type": "text/html" });
+      return res.end(readfile);
+    }
+
+    if (req.url == "/style.css") {
+      const readfile = await fs.readFile(cssfile, "utf-8");
+      res.writeHead(200, { "Content-Type": "text/css" });
+      res.end(readfile);
+    }
+
+    else if (req.url == "/links") {
+      const loaddata = await loadfile()
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify(loaddata))
+    }
+    
+    else {
+      try {
+        const data = await loadfile()
+        const shortcode = req.url.slice("1")
+        console.log(data[shortcode]);
+
+        res.writeHead(302, { location: data[shortcode] })
+        return res.end()
+      } catch (error) {
+        res.writeHead(400, { "Content-Type": "application/text" })
+        res.end("url is not defined ")
+      }
+    }
+  }
+
+
+
+
+  
+
+else if (req.method == "POST") {
+  if (req.url == "/") {
+    let data = "";
+
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+
+
+    req.on("end", async () => {
+
+      const loaddata = await loadfile()
+
+
+
+      const { url, shortcode } = JSON.parse(data)
+
+      if (!url) { 
+        res.writeHead(400, { "Content-Type": "application/text" })
+        return res.end("please enter the url")
+      }
+
+
+      const finalshortcode = shortcode || crypto.randomBytes(4).toString("hex")
+
+
+      if (loaddata[finalshortcode]) {
+        res.writeHead(400, { "Content-Type": "application/text" })
+        return res.end("url is already exists please choose another")
+      }
+
+      loaddata[finalshortcode] = url
+
+      await saveData(loaddata)
+
+      res.writeHead(200, { "Content-Type": "application/json" })
+      return res.end(JSON.stringify({ sucess: true, shortcode: finalshortcode }))
+
+
+
+    })
+  }
+
+
+  }
+})
+
+
+server.listen(port, () => {
+  console.log(`server is listenig at port ${port}`);
+});
